@@ -31,6 +31,9 @@ const double n_cylinders = 1;
 const double n_parallel_springs = 1;
 double flow=0;
 
+
+/*=============================================================================================== FUNCTIONS =   =========*/
+
 // Flow table values, for testing:
 double m_dot(double t)
 {
@@ -46,50 +49,6 @@ double m_dot(double t)
 
     return protok;
 }
-
-// Klasa spomenuta u mailu, ne koristi se
-class block {
-    double n_volumes; // ili n_cylinders
-    double n_inFlow; // ulazni protok
-    double n_pistons;
-
-public:
-    block(){
-        n_volumes = 1;
-        n_pistons = n_volumes; // klipova ima koliko i cilindara, tj. volumena hidrauličkog fluida
-        n_inFlow = 1;
-    }
-    double volumes( double pomak ){
-        return ( V_init + A * pomak ) * n_volumes;
-    }
-    double fluid_preassure( double tlak ){
-        return ( 1/masa ) * ( A*( tlak ) );
-    }
-    double inFlow( double t ){
-        return m_dot(t) * n_inFlow;
-    }
-    double springs ( double n_parallel_springs , double pomak , double brzina ){
-        return ( ( 1/masa ) * ( F_pr + k*( pomak ) + c*( brzina ) ) ) * n_parallel_springs;
-    }
-
-    void set_pistons(double a){
-        n_pistons = a;
-    }
-    void set_volumes(double a){
-        n_volumes = a;
-        n_pistons = n_volumes;
-    }
-    void set_flow(double a){
-        n_inFlow = a;
-    }
-    void operator() ( const state_type &x , state_type &dxdt , const double t )
-    {
-        dxdt[0] = ( E / ( ro * block().volumes( x[1] ) ) ) * ( block().inFlow( t ) +  A*ro*x[2] ); // tlak u hidrauličkom fluidu
-        dxdt[3] = ( E_air / ( ro * block().volumes( x[1] ) ) ) * (( A*ro*x[2] ) );                  // tlak u zraku
-        dxdt[1] = x[2];                                                                         // dx  /dt
-        dxdt[2] = block().fluid_preassure( x[0] ) - block().fluid_preassure( x[3] ) - springs( 1 , x[1], x[2] ) ;           // d^2x/dt^2
-    }
-};
 
 // Funckije za apstrakciju proračuna
 double springs ( double n_parallel_springs , double pomak , double brzina )
@@ -112,14 +71,19 @@ double inFlow ( double n_inFlow , double t )
     return m_dot(t) * n_inFlow;
 }
 
+double flowRate (double n_cylinders, double brzina)  // growth rate of flow caused by movement of the piston
+{
+    return ( A * ro * brzina ) * n_cylinders;
+}
+
 // Funkc for integration: x= 0-tlak 1-pomak 2-brzina
-void RHS2( const state_type &x , state_type &dxdt , const double t )
+void RHS( const state_type &x , state_type &dxdt , const double t )
 {
     flow = inFlow( n_inFlow , t );
-    dxdt[0] = ( E / ( ro * volumes( n_cylinders , x[1] ) ) ) * ( flow + ( A*ro*x[2] ) );        // tlak u hidrauličkom fluidu
-    dxdt[3] = ( E_air / ( ro * volumes( n_cylinders , x[1] ) ) ) * (( A*ro*x[2] ) );            // tlak u zraku
-    dxdt[1] = x[2];                                                                             // dx  /dt
-    dxdt[2] = fluid( x[0] ) - fluid( x[3] ) - springs( n_parallel_springs , x[1], x[2] ) ;      // d^2x/dt^2
+    dxdt[0] = ( E / ( ro * volumes( n_cylinders , x[1] ) ) ) * ( flow + flowRate( n_cylinders , x[2] ) );        // tlak u hidrauličkom fluidu
+    dxdt[3] = ( E_air / ( ro * volumes( n_cylinders , x[1] ) ) ) * flowRate( n_cylinders , x[2] );               // tlak u zraku
+    dxdt[1] = x[2];                                                                                              // dx  /dt
+    dxdt[2] = fluid( x[0] ) - fluid( x[3] ) - springs( n_parallel_springs , x[1], x[2] ) ;                       // d^2x/dt^2
 }
 
 void RHSserialSpring( const state_type &x , state_type &dxdt , const double t )
@@ -136,18 +100,6 @@ void RHSserialSpring( const state_type &x , state_type &dxdt , const double t )
     dxdt[5] = x[6];                                                                                         // dx  /dt
     dxdt[6] = ( 1/masa )*  ( A*( x[0] - p_gas ) - F_pr + dxdt[2] + dxdt[4] ) ;                              // d^2x/dt^2
 
-}
-
-void RHS( const state_type &x , state_type &dxdt , const double t )
-{
-    dxdt[0] = ( E/( ro*( V_init + A*x[1] ) ) )*( m_dot(t) + ( A*ro*x[2] ) );                                // dp  /dt
-    dxdt[1] = x[2];                                                                                         // dx  /dt
-    dxdt[2] = ( 1/masa )*  ( A*( x[0] - p_gas ) - F_pr - k*( x[1] ) - c*( x[2] ) ) ;                        // d^2x/dt^2
-}
-
-void write_console(const state_type &x, const double t)
-{
-    std::cout << t << "\t m: " << flow << "\t p: " << x[0] << "\t x: " << x[1] << "\t v: " << x[2] << std::endl;
 }
 
 struct streaming_observer
@@ -182,18 +134,13 @@ int main(int argc, char *argv[])
     double t_start = 0.0;
     double t_end = 1.0;
     double dt = 1e-6;
-    double steps = 0; //integrate returns
+    double steps = 0; //integrate returns num of steps
 
-    //runge_kutta4< state_type > stepper;
-    //integrate_const(stepper, RHS2, x, t_start, t_end, dt, streaming_observer(out));
-
-    steps = integrate(RHS2, x, t_start, t_end, dt, streaming_observer(out));  // sys( x , dxdt , t )
+    steps = integrate(RHS, x, t_start, t_end, dt, streaming_observer(out));
     cout << "Number of integration steps: " << steps << "\n";
 
     out.close();
-
     system("./drawGraphs.py");
-
     return 0; //a.exec();
 }
 
