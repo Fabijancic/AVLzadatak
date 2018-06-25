@@ -12,7 +12,7 @@ Schematic of the valve in question:
 
 Governing equations for hidraulic fluid preassure are gives as follows:
 
-<img src=images/jedTlak.png height="50" />
+<img src=images/jedTlak.png height="50" width="200" />
 
 Which can be written in the discrete form (dxdt[0] in [code](main.cpp)) as:
 
@@ -24,7 +24,7 @@ Also equations for acceleration can b written in the discrete form (dxdt[2] in [
 
 Input values for the system are given as flow of the hidraulic fluid coming into the cylinder:
 
-<img src=images/Input.png height="150" />
+<img src=images/Input.png height="150" width="650"/>
 
 Expexted output of the program should be the console output reporting the number of integration steps, and a matplotlib window with graphs.
 
